@@ -1,0 +1,23 @@
+name: CI
+on:
+  push:
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.11', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install package
+        run: python -m pip install -e .
+      - name: Tests
+        run: python -m unittest discover -s tests -v
+      - name: CLI smoke (healthy config has no findings)
+        run: lb-lint examples/good.json --reference-date 2026-10-01
+      - name: CLI smoke (risky config is flagged)
+        run: lb-lint examples/risky.json --reference-date 2026-10-01 --output report.json --fail-on high || test $? -eq 2

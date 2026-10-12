@@ -1,0 +1,126 @@
+{
+ "load_balancers": [
+  {
+   "name": "shop-public",
+   "is_private": false,
+   "listeners": [
+    {
+     "name": "https",
+     "port": 443,
+     "protocol": "HTTPS",
+     "default_backend_set": "web",
+     "ssl": {
+      "certificate_name": "shop-cert",
+      "protocols": [
+       "TLSv1.2",
+       "TLSv1.3"
+      ]
+     },
+     "rule_sets": [
+      "security-headers"
+     ]
+    },
+    {
+     "name": "http-redirect",
+     "port": 80,
+     "protocol": "HTTP",
+     "default_backend_set": "web",
+     "rule_sets": [
+      "to-https"
+     ]
+    }
+   ],
+   "backend_sets": [
+    {
+     "name": "web",
+     "policy": "ROUND_ROBIN",
+     "ssl": true,
+     "health_checker": {
+      "protocol": "HTTP",
+      "port": 0,
+      "url_path": "/healthz",
+      "return_code": 200,
+      "interval_ms": 10000,
+      "timeout_ms": 3000,
+      "retries": 3
+     },
+     "backends": [
+      {
+       "ip": "10.0.1.11",
+       "port": 8443
+      },
+      {
+       "ip": "10.0.1.12",
+       "port": 8443
+      },
+      {
+       "ip": "10.0.2.11",
+       "port": 8443,
+       "backup": true
+      }
+     ]
+    }
+   ],
+   "certificates": [
+    {
+     "name": "shop-cert",
+     "not_after": "2027-06-30"
+    }
+   ],
+   "rule_sets": [
+    {
+     "name": "security-headers",
+     "items": [
+      {
+       "action": "ADD_HTTP_RESPONSE_HEADER",
+       "header": "Strict-Transport-Security"
+      }
+     ]
+    },
+    {
+     "name": "to-https",
+     "items": [
+      {
+       "action": "REDIRECT",
+       "protocol": "HTTPS"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "internal-api",
+   "is_private": true,
+   "listeners": [
+    {
+     "name": "api",
+     "port": 8080,
+     "protocol": "HTTP",
+     "default_backend_set": "api"
+    }
+   ],
+   "backend_sets": [
+    {
+     "name": "api",
+     "policy": "LEAST_CONNECTIONS",
+     "health_checker": {
+      "protocol": "TCP",
+      "interval_ms": 5000,
+      "timeout_ms": 2000,
+      "retries": 3
+     },
+     "backends": [
+      {
+       "ip": "10.1.0.5",
+       "port": 8080
+      },
+      {
+       "ip": "10.1.0.6",
+       "port": 8080
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

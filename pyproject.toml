@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "oci-lb-config-lint"
+version = "0.1.0"
+description = "Offline lint of OCI Load Balancer style configuration (listeners, backend sets, health checks, certificates) on synthetic exports"
+requires-python = ">=3.10"
+readme = "README.md"
+
+[project.scripts]
+lb-lint = "lb_lint.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
