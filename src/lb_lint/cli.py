@@ -5,7 +5,7 @@ import json
 import sys
 from datetime import date
 
-from . import analysis, model
+from . import analysis, model, sarif
 
 DISCLAIMER = ("Review priorities from a simplified model of load balancer configuration. "
               "Not tested against a live tenancy; calls no OCI API.")
@@ -17,8 +17,12 @@ def main(argv=None) -> int:
     ap.add_argument("--reference-date", help="YYYY-MM-DD used for certificate expiry (default: today)")
     ap.add_argument("--cert-warn-days", type=int, default=analysis.DEFAULT_CERT_WARN_DAYS)
     ap.add_argument("--output")
+    ap.add_argument("--format", choices=["json", "sarif"], default="json", help="format of the --output file (default json)")
     ap.add_argument("--fail-on", choices=["high", "medium", "low"])
     a = ap.parse_args(argv)
+    if a.format == "sarif" and not a.output:
+        print("error: --format sarif needs --output", file=sys.stderr)
+        return 1
     try:
         if a.cert_warn_days < 0:
             raise ValueError("--cert-warn-days must be 0 or more")
@@ -32,9 +36,10 @@ def main(argv=None) -> int:
         print(f"[{f.severity.upper():6}] {f.rule} {f.subject}: {f.message}")
     print(f"{len(fs)} finding(s) across {len(inv.load_balancers)} load balancer(s).")
     if a.output:
+        doc = sarif.to_sarif(fs, a.inventory.replace("\\", "/")) if a.format == "sarif" else \
+            {"disclaimer": DISCLAIMER, "reference_date": today.isoformat(), "findings": [f.to_dict() for f in fs]}
         with open(a.output, "w", encoding="utf-8") as fh:
-            json.dump({"disclaimer": DISCLAIMER, "reference_date": today.isoformat(),
-                       "findings": [f.to_dict() for f in fs]}, fh, indent=1)
+            json.dump(doc, fh, indent=1)
     if a.fail_on and any(analysis.SEV[f.severity] <= analysis.SEV[a.fail_on] for f in fs):
         return 2
     return 0

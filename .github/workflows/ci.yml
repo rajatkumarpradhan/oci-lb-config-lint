@@ -21,3 +21,5 @@ jobs:
         run: lb-lint examples/good.json --reference-date 2026-10-01
       - name: CLI smoke (risky config is flagged)
         run: lb-lint examples/risky.json --reference-date 2026-10-01 --output report.json --fail-on high || test $? -eq 2
+      - name: CLI smoke (SARIF output)
+        run: lb-lint examples/risky.json --reference-date 2026-10-01 --output report.sarif --format sarif

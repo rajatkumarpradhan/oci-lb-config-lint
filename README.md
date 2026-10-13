@@ -31,10 +31,15 @@ python -m pip install -e .
 lb-lint examples/good.json --reference-date 2026-10-01      # 0 findings
 lb-lint examples/risky.json --reference-date 2026-10-01 --output report.json
 lb-lint examples/risky.json --reference-date 2026-10-01 --fail-on high   # exit 2 if any high finding
+lb-lint examples/risky.json --reference-date 2026-10-01 --output report.sarif --format sarif   # SARIF 2.1.0
 python -m unittest discover -s tests -v
 ```
 
 `--reference-date` pins "today" for certificate checks, so results are reproducible. Without it the local date is used. Exit codes: 0 clean (or no `--fail-on` threshold hit), 1 unreadable or invalid input, 2 threshold hit.
+
+## SARIF output
+
+`--format sarif --output FILE` writes the findings as SARIF 2.1.0 instead of the default JSON report, with one rule entry for each of LB001 to LB015. Severity maps to level (high = error, medium = warning, low = note). Each result carries its rule id, message, the input file as `artifactLocation`, and the load balancer and listener, backend set or certificate as a logical location. The input has no line numbers, so results point at the file, not a line. `--format sarif` needs `--output`; the terminal text and exit codes are unchanged, and a clean input gives an empty results list. This is a small hand-built subset of SARIF: the tests check its shape, but it has not been validated against the official schema or loaded into a real viewer.
 
 ## Input shape
 
@@ -66,7 +71,7 @@ Validation is strict: bad ports, unknown protocols, duplicate names or listener 
 
 ## Tests
 
-38 unit tests: every rule with its boundaries (certificate expiry at 30/31 days, today and yesterday, timeout equal to the interval, retries 1 and 2), cases that must stay quiet (private load balancers, backup backends, same IP on another port, modern TLS only), 20 structural validation cases, finding order, the CLI exit codes and the JSON report. A healthy example must produce zero findings and the risky example must trigger every rule. CI runs on Python 3.10, 3.11 and 3.12.
+50 unit tests: every rule with its boundaries (certificate expiry at 30/31 days, today and yesterday, timeout equal to the interval, retries 1 and 2), cases that must stay quiet (private load balancers, backup backends, same IP on another port, modern TLS only), 20 structural validation cases, finding order, the CLI exit codes, the JSON report, and the SARIF output (shape, level mapping, rule index, empty case, CLI). A healthy example must produce zero findings and the risky example must trigger every rule. CI runs on Python 3.10, 3.11 and 3.12.
 
 ## License
 
