@@ -18,7 +18,12 @@
      },
      "rule_sets": [
       "security-headers"
-     ]
+     ],
+     "hostnames": [
+      "shop.example.com",
+      "api.example.com"
+     ],
+     "routing_policy": "by-path"
     },
     {
      "name": "http-redirect",
@@ -59,6 +64,30 @@
        "backup": true
       }
      ]
+    },
+    {
+     "name": "api",
+     "policy": "ROUND_ROBIN",
+     "ssl": true,
+     "health_checker": {
+      "protocol": "HTTP",
+      "port": 0,
+      "url_path": "/healthz",
+      "return_code": 200,
+      "interval_ms": 10000,
+      "timeout_ms": 3000,
+      "retries": 3
+     },
+     "backends": [
+      {
+       "ip": "10.0.3.11",
+       "port": 8443
+      },
+      {
+       "ip": "10.0.3.12",
+       "port": 8443
+      }
+     ]
     }
    ],
    "certificates": [
@@ -83,6 +112,41 @@
       {
        "action": "REDIRECT",
        "protocol": "HTTPS"
+      }
+     ]
+    }
+   ],
+   "hostnames": [
+    "shop.example.com",
+    "api.example.com"
+   ],
+   "routing_policies": [
+    {
+     "name": "by-path",
+     "rules": [
+      {
+       "name": "api-v2",
+       "condition": {
+        "hostname": "api.example.com",
+        "path_prefix": "/v2"
+       },
+       "backend_set": "api"
+      },
+      {
+       "name": "api-all",
+       "condition": {
+        "hostname": "api.example.com",
+        "path_prefix": "/"
+       },
+       "backend_set": "api"
+      },
+      {
+       "name": "shop-exact",
+       "condition": {
+        "hostname": "shop.example.com",
+        "path_exact": "/"
+       },
+       "backend_set": "web"
       }
      ]
     }

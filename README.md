@@ -22,7 +22,11 @@ Offline lint of load balancer configuration in the shape of an OCI Load Balancer
 | LB012 | low | HTTPS listener without a Strict-Transport-Security response header rule |
 | LB013 | low | TLS ends at the load balancer and the backend set is not TLS |
 | LB014 | medium | HTTP listener on 443 or HTTPS listener on 80 |
-| LB015 | low | Backend set that no listener uses as its default |
+| LB015 | low | Backend set that no listener or routing-policy rule uses |
+| LB016 | medium | Routing-policy rule that can never match because an earlier rule covers it |
+| LB017 | low | Hostname defined but used by no listener |
+| LB018 | high / medium | Listener or route points at a hostname, routing policy or backend set that does not exist (medium: policy on a TCP listener) |
+| LB019 | low | Routing policy no listener uses |
 
 ## Usage
 
@@ -39,7 +43,7 @@ python -m unittest discover -s tests -v
 
 ## SARIF output
 
-`--format sarif --output FILE` writes the findings as SARIF 2.1.0 instead of the default JSON report, with one rule entry for each of LB001 to LB015. Severity maps to level (high = error, medium = warning, low = note). Each result carries its rule id, message, the input file as `artifactLocation`, and the load balancer and listener, backend set or certificate as a logical location. The input has no line numbers, so results point at the file, not a line. `--format sarif` needs `--output`; the terminal text and exit codes are unchanged, and a clean input gives an empty results list. This is a small hand-built subset of SARIF: the tests check its shape, but it has not been validated against the official schema or loaded into a real viewer.
+`--format sarif --output FILE` writes the findings as SARIF 2.1.0 instead of the default JSON report, with one rule entry for each of LB001 to LB019. Severity maps to level (high = error, medium = warning, low = note). Each result carries its rule id, message, the input file as `artifactLocation`, and the load balancer and listener, backend set or certificate as a logical location. The input has no line numbers, so results point at the file, not a line. `--format sarif` needs `--output`; the terminal text and exit codes are unchanged, and a clean input gives an empty results list. This is a small hand-built subset of SARIF: the tests check its shape, but it has not been validated against the official schema or loaded into a real viewer.
 
 ## Input shape
 
@@ -76,3 +80,9 @@ Validation is strict: bad ports, unknown protocols, duplicate names or listener 
 ## License
 
 MIT
+
+## Routing policies and hostnames
+
+The input can define `hostnames` and `routing_policies` on a load balancer. A listener lists the hostnames it serves and names one `routing_policy`. Each policy has ordered `rules` with a `condition` (`hostname`, and either `path_prefix` or `path_exact`) and a `backend_set`. A rule with no condition matches everything.
+
+Shadowing (LB016) assumes first-match-wins in rule order, which is how I modelled it. A prefix is a plain string prefix, so `/api` also covers `/apix`. An exact path only covers the same exact path. A rule with no hostname covers every host; a rule with a hostname only covers that same host. Not modelled: wildcard hostname matching against concrete hostnames, regex or header conditions, and OCI's real rule-ordering and limits. This follows my own simplified schema, not the OCI API, and has not been checked against a real load balancer.

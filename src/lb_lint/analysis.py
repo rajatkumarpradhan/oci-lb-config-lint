@@ -35,11 +35,41 @@ def _has_hsts(lb: LoadBalancer, names: list[str]) -> bool:
                for n in names for r in lb.rule_sets.get(n, []))
 
 
+def _host_covers(earlier, later) -> bool:
+    """An earlier route with no hostname matches every host; otherwise the hostnames must be equal."""
+    return earlier is None or earlier == later
+
+
+def _path_covers(e, l) -> bool:
+    """True when every request path matched by route l is already matched by route e (prefix = plain string prefix)."""
+    if e.path_prefix is None and e.path_exact is None:
+        return True
+    if e.path_exact is not None:
+        return l.path_exact == e.path_exact
+    lp = l.path_prefix if l.path_prefix is not None else l.path_exact
+    return lp is not None and lp.startswith(e.path_prefix)
+
+
+def shadowed_by(routes) -> dict:
+    """Map index of a shadowed route to the index of the first earlier route that covers it."""
+    out = {}
+    for i, r in enumerate(routes):
+        for j in range(i):
+            e = routes[j]
+            if _host_covers(e.hostname, r.hostname) and _path_covers(e, r):
+                out[i] = j
+                break
+    return out
+
+
 def analyze(inv: Inventory, today: date, cert_warn_days: int = DEFAULT_CERT_WARN_DAYS) -> list[Finding]:
     out: list[Finding] = []
     for lb in inv.load_balancers:
         sets = {s.name: s for s in lb.backend_sets}
         used = {x.default_backend_set for x in lb.listeners}
+        used_pols = {x.routing_policy for x in lb.listeners if x.routing_policy}
+        used |= {r.backend_set for n in used_pols for r in lb.routing_policies.get(n, [])}
+        used_hosts = {h for x in lb.listeners for h in x.hostnames}
         for x in lb.listeners:
             sub = f"{lb.name}/listener:{x.name}"
             if x.protocol == "HTTPS":
@@ -70,9 +100,31 @@ def analyze(inv: Inventory, today: date, cert_warn_days: int = DEFAULT_CERT_WARN
             if x.default_backend_set not in sets:
                 out.append(Finding("LB007", "high", sub, f"Default backend set {x.default_backend_set!r} does not exist.",
                                    {"backend_set": x.default_backend_set}))
+            for h in x.hostnames:
+                if h not in lb.hostnames:
+                    out.append(Finding("LB018", "high", sub, f"Hostname {h!r} is not defined on this load balancer.", {"hostname": h}))
+            if x.routing_policy and x.routing_policy not in lb.routing_policies:
+                out.append(Finding("LB018", "high", sub, f"Routing policy {x.routing_policy!r} does not exist.", {"routing_policy": x.routing_policy}))
+            if x.routing_policy and x.protocol == "TCP":
+                out.append(Finding("LB018", "medium", sub, "A routing policy is set on a TCP listener; path and host routing only apply to HTTP and HTTPS.",
+                                   {"routing_policy": x.routing_policy}))
             for rn in x.rule_sets:
                 if rn not in lb.rule_sets:
                     out.append(Finding("LB007", "high", sub, f"Rule set {rn!r} does not exist.", {"rule_set": rn}))
+        for h in lb.hostnames:
+            if h not in used_hosts:
+                out.append(Finding("LB017", "low", f"{lb.name}/hostname:{h}", "Hostname is defined but no listener uses it.", {"hostname": h}))
+        for pn, routes in lb.routing_policies.items():
+            sub = f"{lb.name}/routing-policy:{pn}"
+            if pn not in used_pols:
+                out.append(Finding("LB019", "low", sub, "Routing policy is not used by any listener.", {}))
+            for i, j in shadowed_by(routes).items():
+                out.append(Finding("LB016", "medium", f"{sub}/rule:{routes[i].name}",
+                                   f"Can never match: rule {routes[j].name!r} earlier in the policy already matches every request this rule would.",
+                                   {"shadowed_by": routes[j].name}))
+            for r in routes:
+                if r.backend_set not in sets:
+                    out.append(Finding("LB018", "high", f"{sub}/rule:{r.name}", f"Backend set {r.backend_set!r} does not exist.", {"backend_set": r.backend_set}))
         for name, d in sorted(lb.certificates.items()):
             left = (d - today).days
             sub = f"{lb.name}/certificate:{name}"

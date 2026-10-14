@@ -55,7 +55,7 @@ class CleanTests(unittest.TestCase):
 
     def test_risky_example_covers_every_rule(self):
         got = rules(load_ex("risky.json"))
-        self.assertEqual(got, {f"LB{n:03d}" for n in range(1, 16)})
+        self.assertEqual(got, {f"LB{n:03d}" for n in range(1, 20)})
 
     def test_finding_order_is_by_severity(self):
         sev = [analysis.SEV[f.severity] for f in run(load_ex("risky.json"))]

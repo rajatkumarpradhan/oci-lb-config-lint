@@ -68,6 +68,17 @@ class Listener:
     certificate: str | None
     tls_protocols: list[str]
     rule_sets: list[str]
+    hostnames: list[str] = field(default_factory=list)
+    routing_policy: str | None = None
+
+
+@dataclass
+class Route:
+    name: str
+    backend_set: str
+    hostname: str | None = None
+    path_prefix: str | None = None
+    path_exact: str | None = None
 
 
 @dataclass
@@ -85,6 +96,8 @@ class LoadBalancer:
     backend_sets: list[BackendSet]
     certificates: dict[str, date]
     rule_sets: dict[str, list[Rule]]
+    hostnames: list[str] = field(default_factory=list)
+    routing_policies: dict[str, list[Route]] = field(default_factory=dict)
 
 
 @dataclass
@@ -150,9 +163,46 @@ def _listener(x, where) -> Listener:
     rs = x.get("rule_sets", [])
     if not isinstance(rs, list) or any(not isinstance(p, str) for p in rs):
         raise ModelError(f"{where}.rule_sets must be a list of names")
+    hn = x.get("hostnames", [])
+    if not isinstance(hn, list) or any(not isinstance(p, str) for p in hn):
+        raise ModelError(f"{where}.hostnames must be a list of names")
+    rp = x.get("routing_policy")
+    if rp is not None:
+        _str(rp, f"{where}.routing_policy")
     return Listener(_str(x["name"], f"{where}.name"), _int(x["port"], f"{where}.port", 1), proto,
                     _str(x["default_backend_set"], f"{where}.default_backend_set"),
-                    ssl.get("certificate_name"), [p.upper() for p in protos], rs)
+                    ssl.get("certificate_name"), [p.upper() for p in protos], rs, hn, rp)
+
+
+_HOST = re.compile(r"^(\*\.)?([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$")
+
+
+def _hostname(v, where) -> str:
+    v = _str(v, where)
+    if len(v) > 253 or not _HOST.match(v):
+        raise ModelError(f"{where} must be a lower-case hostname (optionally *.example.com), got {v!r}")
+    return v
+
+
+def _path(v, where):
+    if v is None:
+        return None
+    v = _str(v, where)
+    if not v.startswith("/"):
+        raise ModelError(f"{where} must start with '/', got {v!r}")
+    return v
+
+
+def _route(r, where) -> Route:
+    cond = r.get("condition") or {}
+    if not isinstance(cond, dict):
+        raise ModelError(f"{where}.condition must be an object")
+    host = cond.get("hostname")
+    pre, exact = _path(cond.get("path_prefix"), f"{where}.condition.path_prefix"), _path(cond.get("path_exact"), f"{where}.condition.path_exact")
+    if pre is not None and exact is not None:
+        raise ModelError(f"{where}.condition: use path_prefix or path_exact, not both")
+    return Route(_str(r["name"], f"{where}.name"), _str(r["backend_set"], f"{where}.backend_set"),
+                 _hostname(host, f"{where}.condition.hostname") if host is not None else None, pre, exact)
 
 
 def _rule(r, where) -> Rule:
@@ -185,8 +235,21 @@ def load(data: dict) -> Inventory:
                      for c in lb.get("certificates", [])}
             rsets = {_str(r["name"], f"{where}.rule_sets.name"): [_rule(x, f"{where}.rule_sets") for x in r.get("items", [])]
                      for r in lb.get("rule_sets", [])}
+            hosts = [_hostname(h, f"{where}.hostnames") for h in lb.get("hostnames", [])]
+            if len(hosts) != len(set(hosts)):
+                raise ModelError(f"{name}: duplicate hostname")
+            pols = {}
+            for j, pl in enumerate(lb.get("routing_policies", [])):
+                pn = _str(pl["name"], f"{where}.routing_policies[{j}].name")
+                if pn in pols:
+                    raise ModelError(f"{name}: duplicate routing policy {pn!r}")
+                routes = [_route(r, f"{where}.routing_policies[{j}].rules[{k}]") for k, r in enumerate(pl.get("rules", []))]
+                rn = [r.name for r in routes]
+                if len(rn) != len(set(rn)):
+                    raise ModelError(f"{name}: duplicate rule name in routing policy {pn!r}")
+                pols[pn] = routes
             lbs.append(LoadBalancer(name, _bool(lb.get("is_private", False), f"{where}.is_private"),
-                                    listeners, sets, certs, rsets))
+                                    listeners, sets, certs, rsets, hosts, pols))
     except (KeyError, TypeError, AttributeError) as e:
         raise ModelError(f"invalid model: {e!r}") from e
     return Inventory(lbs)

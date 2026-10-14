@@ -8,7 +8,12 @@
      "name": "web80",
      "port": 80,
      "protocol": "HTTP",
-     "default_backend_set": "app"
+     "default_backend_set": "app",
+     "hostnames": [
+      "www.example.com",
+      "missing.example.com"
+     ],
+     "routing_policy": "p"
     },
     {
      "name": "web443",
@@ -100,6 +105,43 @@
     {
      "name": "soon",
      "not_after": "2026-10-15"
+    }
+   ],
+   "hostnames": [
+    "www.example.com",
+    "unused.example.com"
+   ],
+   "routing_policies": [
+    {
+     "name": "p",
+     "rules": [
+      {
+       "name": "all-api",
+       "condition": {
+        "path_prefix": "/api"
+       },
+       "backend_set": "app"
+      },
+      {
+       "name": "api-v1",
+       "condition": {
+        "path_prefix": "/api/v1"
+       },
+       "backend_set": "app"
+      },
+      {
+       "name": "ghost-target",
+       "condition": {
+        "hostname": "www.example.com",
+        "path_exact": "/x"
+       },
+       "backend_set": "nowhere"
+      }
+     ]
+    },
+    {
+     "name": "idle",
+     "rules": []
     }
    ]
   },

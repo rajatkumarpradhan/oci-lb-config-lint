@@ -27,6 +27,10 @@ RULES = {
     "LB013": "TLS ends at the load balancer; backends are not TLS",
     "LB014": "Listener port and protocol look swapped",
     "LB015": "Backend set is not used by any listener",
+    "LB016": "Routing policy rule can never match (shadowed by an earlier rule)",
+    "LB017": "Hostname is not used by any listener",
+    "LB018": "Missing hostname, routing policy or backend set reference",
+    "LB019": "Routing policy is not used by any listener",
 }
 
 

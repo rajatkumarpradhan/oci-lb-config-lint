@@ -41,14 +41,14 @@ class SarifTests(unittest.TestCase):
         run = to_sarif(findings(), "x.json")["runs"][0]
         rules = run["tool"]["driver"]["rules"]
         self.assertEqual([r["id"] for r in rules], sorted(RULES))
-        self.assertEqual(len(rules), 15)
+        self.assertEqual(len(rules), 19)
         for r in rules:
             self.assertTrue(r["shortDescription"]["text"])
         for r in run["results"]:
             self.assertEqual(rules[r["ruleIndex"]]["id"], r["ruleId"])
 
     def test_every_analysis_rule_is_described(self):
-        for n in range(1, 16):
+        for n in range(1, 20):
             self.assertIn(f"LB{n:03d}", RULES)
         self.assertEqual({f.rule for f in findings()}, set(RULES))
 
@@ -62,7 +62,7 @@ class SarifTests(unittest.TestCase):
     def test_empty_result_case(self):
         doc = to_sarif(findings("good.json"), "examples/good.json")
         self.assertEqual(doc["runs"][0]["results"], [])
-        self.assertEqual(len(doc["runs"][0]["tool"]["driver"]["rules"]), 15)
+        self.assertEqual(len(doc["runs"][0]["tool"]["driver"]["rules"]), 19)
 
     def test_output_is_json_serialisable(self):
         json.dumps(to_sarif(findings(), "x.json"))
